@@ -14,6 +14,7 @@ import { Admin } from './entity/admin.entity';
 import { AdminModule } from './Admin/admin.module';
 import { Seller } from './entity/Seller.entity';
 
+
 @Module({
   imports: [
     TypeOrmModule.forRoot({

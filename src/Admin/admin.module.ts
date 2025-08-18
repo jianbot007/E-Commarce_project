@@ -9,7 +9,7 @@ import { Profile } from 'src/entity/profile.entity';
 import { JwtStrategy } from './auth/jwt.strategy';
 import { User } from 'src/entity/user.entity';
 import { Seller } from 'src/entity/Seller.entity';
-
+import { MailModule } from './mailer.module';
 
 @Module({
   imports: [
@@ -19,6 +19,7 @@ import { Seller } from 'src/entity/Seller.entity';
       secret: 'jwt_secret_key',   
       signOptions: { expiresIn: '1h' },
     }),
+    MailModule
   ],
   controllers: [AdminController],
   providers: [AdminService, JwtStrategy],

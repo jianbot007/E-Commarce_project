@@ -1,15 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Put,
-  Query,
-  Post,
-  UseGuards,
-  UsePipes,
-  ValidationPipe,
+import {Body,Controller,Delete,Get,Param,Put,Query,Post,UseGuards,UsePipes,ValidationPipe, Patch, ParseIntPipe,
 } from '@nestjs/common';
 
 import { AdminDto } from './AdminDtos/admin.dto';
@@ -21,6 +10,7 @@ import { User } from 'src/entity/user.entity';
 import { Seller } from 'src/entity/Seller.entity';
 import { Admin } from 'src/entity/admin.entity';
 import { Profile } from 'src/entity/profile.entity';
+import { ProfileDto } from './AdminDtos/profile.dto';
 
 @Controller('admin')
 export class AdminController {
@@ -49,9 +39,9 @@ export class AdminController {
   @UsePipes(new ValidationPipe({}))
   async update(
     @Param('id') id: number,
-    @Body() updateAdminDto: UpdateAdminDto,
-  ): Promise<Admin> {
-    return this.adminService.update(id, updateAdminDto);
+    @Body() updateprofileDto: ProfileDto,
+  ): Promise<Profile> {
+    return this.adminService.update(id, updateprofileDto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -88,5 +78,10 @@ export class AdminController {
   @Get('sellers/search')
   async searchSeller(@Query('name') name: string): Promise<Seller[]> {
     return this.adminService.searchSellerByName(name);
+  }
+
+  @Patch('block/:id')
+  async blockSeller(@Param('id', ParseIntPipe) id: number): Promise<Seller> {
+    return this.adminService.blockSeller(id);
   }
 }

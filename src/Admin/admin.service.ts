@@ -1,4 +1,4 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
@@ -10,10 +10,13 @@ import { LoginDto } from './AdminDtos/login.dto';
 import { UpdateAdminDto } from './AdminDtos/update-admin.dto';
 import { User } from 'src/entity/user.entity';
 import { Seller } from 'src/entity/Seller.entity';
+import { MailService } from './mail.service';
+import { ProfileDto } from './AdminDtos/profile.dto';
 
 @Injectable()
 export class AdminService {
   constructor(
+    private readonly mailService : MailService,
     @InjectRepository(Admin) private adminRepo: Repository<Admin>,
     @InjectRepository(Profile) private profileRepo: Repository<Profile>,
     @InjectRepository(User) private userRepo: Repository<User>,
@@ -29,6 +32,8 @@ export class AdminService {
 
     const hashed = await bcrypt.hash(dto.password, 10);
     const admin = this.adminRepo.create({ ...dto, password: hashed });
+
+    await this.mailService.sendRegistrationMail(dto.email,dto.name);
     return this.adminRepo.save(admin);
   }
 
@@ -56,16 +61,11 @@ export class AdminService {
     return admin;
   }
 
-  async update(id: number, dto: UpdateAdminDto): Promise<Admin> {
-    const admin = await this.adminRepo.findOne({ where: { id } });
-    if (!admin) throw new HttpException('Admin not found', HttpStatus.NOT_FOUND);
-
-    if (dto.password) {
-      dto.password = await bcrypt.hash(dto.password, 10);
-    }
-
-    Object.assign(admin, dto);
-    return this.adminRepo.save(admin);
+  async update(id: number, dto: ProfileDto): Promise<Profile> {
+    const adminprofile = await this.profileRepo.findOne({ where: { id } });
+    if (!adminprofile) throw new HttpException('Profile not found', HttpStatus.NOT_FOUND);
+    Object.assign(adminprofile, dto);
+    return this.profileRepo.save(adminprofile);
   }
 
   async delete(id: number): Promise<{ message: string }> {
@@ -95,5 +95,13 @@ async searchUserByName(user_name: string): Promise<User[]> {
 async searchSellerByName(name: string): Promise<Seller[]> {
   return this.sellerRepo.find({ where: { name } }); 
 }
+
+async blockSeller(id: number): Promise<Seller> {
+    const seller = await this.sellerRepo.findOne({ where: { id } });
+    if (!seller) throw new NotFoundException('Seller not found');
+
+    seller.isBlocked = true; // set block to true
+    return this.sellerRepo.save(seller);
+  }
 
 }
