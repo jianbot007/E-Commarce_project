@@ -1,20 +1,21 @@
-import { Injectable, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus, NotFoundException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { Admin } from 'src/entity/admin.entity';
 import { Profile } from 'src/entity/profile.entity';
 import { AdminDto } from './AdminDtos/admin.dto';
 import { LoginDto } from './AdminDtos/login.dto';
-import { UpdateAdminDto } from './AdminDtos/update-admin.dto';
 import { User } from 'src/entity/user.entity';
 import { Seller } from 'src/entity/Seller.entity';
 import { MailService } from './mail.service';
 import { ProfileDto } from './AdminDtos/profile.dto';
+import Pusher from 'pusher';
 
 @Injectable()
 export class AdminService {
+
   constructor(
     private readonly mailService : MailService,
     @InjectRepository(Admin) private adminRepo: Repository<Admin>,
@@ -22,6 +23,7 @@ export class AdminService {
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(Seller) private sellerRepo: Repository<Seller>,
     private jwtService: JwtService,
+     @Inject('PUSHER_CLIENT') private readonly pusher: Pusher, 
   ) {}
 
   async register(dto: AdminDto): Promise<Admin> {
@@ -37,28 +39,32 @@ export class AdminService {
     return this.adminRepo.save(admin);
   }
 
-  async login(dto: LoginDto): Promise<{ access_token: string }> {
-    const admin = await this.adminRepo.findOne({ where: { email: dto.email } });
-    if (!admin) {
-      throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
-    }
-
-    const valid = await bcrypt.compare(dto.password, admin.password);
-    if (!valid) {
-      throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
-    }
-
-    const payload = { sub: admin.id, email: admin.email };
-    return { access_token: this.jwtService.sign(payload) };
+async login(dto: LoginDto): Promise<{ access_token: string }> {
+  const admin = await this.adminRepo.findOne({ where: { email: dto.email } });
+  if (!admin) {
+    throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
   }
 
-  async getProfile(id: number): Promise<Admin> {
+  const valid = await bcrypt.compare(dto.password, admin.password);
+  if (!valid) {
+    throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
+  }
+
+  const payload = { id: admin.id, email: admin.email, name: admin.name };
+  const access_token = this.jwtService.sign(payload);
+
+  return { access_token };
+}
+
+
+
+  async getProfile(id: number): Promise<Profile> {
     const admin = await this.adminRepo.findOne({
       where: { id },
       relations: ['profile'],
     });
     if (!admin) throw new HttpException('Admin not found', HttpStatus.NOT_FOUND);
-    return admin;
+    return admin.profile;
   }
 
   async update(id: number, dto: ProfileDto): Promise<Profile> {
@@ -88,20 +94,133 @@ export class AdminService {
     return this.sellerRepo.find();
   }
 
+    async DeleteSeller(id: number): Promise<{ message: string }> {
+    const result = await this.sellerRepo.delete(id);
+    if (result.affected === 0) {
+      throw new HttpException('Seller not found', HttpStatus.NOT_FOUND);
+    }
+    return { message: 'Seller deleted successfully' };
+  }
+
 async searchUserByName(user_name: string): Promise<User[]> {
-  return this.userRepo.find({ where: { user_name } });
+  return this.userRepo.find({ where: { user_name: ILike(`%${user_name}%`),  } });
 }
 
 async searchSellerByName(name: string): Promise<Seller[]> {
-  return this.sellerRepo.find({ where: { name } }); 
+  return this.sellerRepo.find({ where: { name: ILike(`%${name}%`),  } }); 
 }
 
-async blockSeller(id: number): Promise<Seller> {
-    const seller = await this.sellerRepo.findOne({ where: { id } });
+async SellerById(id: number): Promise<Seller | null> {
+  return this.sellerRepo.findOne({ where: { id } });
+}
+
+async blockSeller(id: number, adminId: number) {
+    const seller = await this.sellerRepo.findOneBy({ id });
     if (!seller) throw new NotFoundException('Seller not found');
 
-    seller.isBlocked = true; // set block to true
-    return this.sellerRepo.save(seller);
+    seller.isBlocked = true;
+    await this.sellerRepo.save(seller);
+
+    
+    const admin = await this.adminRepo.findOneBy({ id: adminId });
+
+
+    await this.pusher.trigger("admin-channel", "seller-blocked", {
+      adminId: admin?.id,
+      adminName: admin?.name,
+      sellerId: seller.id,
+      sellerName: seller.name,
+      time: new Date().toISOString(),
+    });
+
+    return seller;
   }
+
+  async unblockSeller(id: number, adminId: number) {
+    const seller = await this.sellerRepo.findOneBy({ id });
+    if (!seller) throw new NotFoundException('Seller not found');
+
+    seller.isBlocked = false;
+    await this.sellerRepo.save(seller);
+
+    const admin = await this.adminRepo.findOneBy({ id: adminId });
+     
+      await this.pusher.trigger("admin-channel", "seller-unblocked", {
+      adminId: admin?.id,
+      adminName: admin?.name,
+      sellerId: seller.id,
+      sellerName: seller.name,
+      time: new Date().toISOString(),
+    });
+
+    console.log(admin?.name);
+
+    return seller;
+  }
+
+
+
+    async getonlyProfile(id: number): Promise<LoginDto> {
+    const admin = await this.profileRepo.findOne({
+      where: { id },
+      relations: ['profile'],
+    });
+    if (!admin) throw new HttpException('Admin not found', HttpStatus.NOT_FOUND);
+    return admin.admin;
+  }
+
+   async getAdmin(email: string): Promise<Admin> {
+  const admin = await this.adminRepo.findOne({
+    where: { email: email }, 
+     relations: ["profile"]
+  });
+
+  if (!admin) {
+    throw new HttpException('Admin not found', HttpStatus.NOT_FOUND);
+  }
+
+  return admin;
+}
+
+async changePassword(
+    adminId: number,
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    const admin = await this.adminRepo.findOne({ where: { id: adminId } });
+    if (!admin) {
+      throw new HttpException('Admin not found', HttpStatus.NOT_FOUND);
+    }
+
+    const isMatch = await bcrypt.compare(oldPassword, admin.password);
+    if (!isMatch) {
+      throw new HttpException('Old password is incorrect', HttpStatus.BAD_REQUEST);
+    }
+
+    admin.password = await bcrypt.hash(newPassword, 10);
+    await this.adminRepo.save(admin);
+
+    return { message: 'Password changed successfully' };
+  }
+
+  async getDashboardStats() {
+
+  const totalAdmins = await this.adminRepo.count();
+
+  const totalSellers = await this.sellerRepo.count();
+
+  const totalCustomers = await this.userRepo.count();
+
+  const totalBlockedSellers = await this.sellerRepo.count({
+    where: { isBlocked: true },
+  });
+
+  return {
+    totalAdmins,
+    totalSellers,
+    totalCustomers,
+    totalBlockedSellers,
+  };
+}
 
 }

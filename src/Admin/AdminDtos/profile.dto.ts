@@ -1,4 +1,5 @@
 import { IsOptional, Matches } from 'class-validator';
+import { Unique } from 'typeorm';
 
 export class ProfileDto {
   @IsOptional()

@@ -3,6 +3,8 @@ import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 import { join } from 'path';
 import { MailService } from './mail.service';
+import { PusherProvider } from './Pusher/pusher.provider';
+import { PusherService } from './Pusher/pusher.service';
 
 @Module({
   imports: [
@@ -11,8 +13,8 @@ import { MailService } from './mail.service';
         host: 'smtp.gmail.com',        
         secure: false,                 
         auth: {
-          user: 'email',
-          pass: 'pass',   
+          user: 'kmrahman744@gmail.com',
+          pass: 'mbzv ikwx sfmd uoqk',   
         },
       },
       defaults: {

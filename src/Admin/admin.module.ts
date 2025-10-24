@@ -10,6 +10,8 @@ import { JwtStrategy } from './auth/jwt.strategy';
 import { User } from 'src/entity/user.entity';
 import { Seller } from 'src/entity/Seller.entity';
 import { MailModule } from './mailer.module';
+import { PusherModule } from './Pusher/pusher.module';
+import { PusherProvider } from './Pusher/pusher.provider';
 
 @Module({
   imports: [
@@ -19,10 +21,11 @@ import { MailModule } from './mailer.module';
       secret: 'jwt_secret_key',   
       signOptions: { expiresIn: '1h' },
     }),
-    MailModule
+    MailModule,
+    PusherModule
   ],
   controllers: [AdminController],
-  providers: [AdminService, JwtStrategy],
+  providers: [AdminService, JwtStrategy,PusherProvider],
   exports: [AdminService], 
 })
 export class AdminModule {}
